@@ -120,3 +120,35 @@ class ClientPayment:
             return stats
         finally:
             conn.close()
+    @staticmethod
+    def get_all_payments(client_id=None, start_date=None, end_date=None, organisation_id=None):
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor(dictionary=True)
+            query = """
+                SELECT cp.*, c.company_name, u.name as added_by_name
+                FROM client_payments cp
+                JOIN clients c ON cp.client_id = c.id
+                LEFT JOIN users u ON cp.added_by = u.id
+                WHERE 1=1
+            """
+            params = []
+            if organisation_id is not None:
+                query += " AND c.organisation_id = %s"
+                params.append(organisation_id)
+            if client_id:
+                query += " AND cp.client_id = %s"
+                params.append(client_id)
+            if start_date:
+                query += " AND cp.payment_date >= %s"
+                params.append(start_date)
+            if end_date:
+                query += " AND cp.payment_date <= %s"
+                params.append(end_date)
+            query += " ORDER BY cp.payment_date DESC"
+            cursor.execute(query, params)
+            payments = cursor.fetchall()
+            cursor.close()
+            return payments
+        finally:
+            conn.close()

@@ -306,3 +306,27 @@ def add_observer(task_id):
         return jsonify({"message": "Observer added"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+@task_bp.route('/tasks/<int:task_id>/participants/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def remove_participant(task_id, user_id):
+    claims = get_jwt()
+    if claims['role'] not in LEAD_ROLES:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        Task.remove_participant(task_id, user_id)
+        return jsonify({"message": "Participant removed"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@task_bp.route('/tasks/<int:task_id>/observers/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def remove_observer(task_id, user_id):
+    claims = get_jwt()
+    if claims['role'] not in LEAD_ROLES:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        Task.remove_observer(task_id, user_id)
+        return jsonify({"message": "Observer removed"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400

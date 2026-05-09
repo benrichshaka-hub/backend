@@ -159,6 +159,9 @@ def unhandled_exception(e):
 # ── Blueprints ────────────────────────────────────────────────
 from app.routes.superadmin import superadmin_bp
 from app.routes.chat import chat_bp
+from app.routes.eod import eod_bp
+from app.routes.client_profile import client_profile_bp
+from app.routes.lead_activity import lead_activity_bp
 
 app.register_blueprint(auth_bp,       url_prefix='/api/auth')
 app.register_blueprint(client_bp,     url_prefix='/api')
@@ -183,6 +186,9 @@ app.register_blueprint(leads_bp,         url_prefix='/api')
 app.register_blueprint(domain_bp,        url_prefix='/api')
 app.register_blueprint(superadmin_bp,    url_prefix='/api/superadmin')
 app.register_blueprint(chat_bp,          url_prefix='/api')
+app.register_blueprint(eod_bp,           url_prefix='/api')
+app.register_blueprint(client_profile_bp, url_prefix='/api')
+app.register_blueprint(lead_activity_bp,  url_prefix='/api')
 
 # Apply stricter rate limits to auth endpoints
 limiter.limit('10 per minute')(auth_bp)

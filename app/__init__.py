@@ -145,6 +145,7 @@ from app.routes.announcements import announcements_bp
 from app.routes.documents import documents_bp
 from app.routes.domain import domain_bp
 from app.routes.superadmin import superadmin_bp
+from app.routes.eod import eod_bp
 
 app.register_blueprint(auth_bp,          url_prefix='/api/auth')
 app.register_blueprint(client_bp,        url_prefix='/api')
@@ -164,6 +165,7 @@ app.register_blueprint(announcements_bp, url_prefix='/api/announcements')
 app.register_blueprint(documents_bp,     url_prefix='/api/documents')
 app.register_blueprint(domain_bp,        url_prefix='/api')
 app.register_blueprint(superadmin_bp,    url_prefix='/api/superadmin')
+app.register_blueprint(eod_bp,           url_prefix='/api')
 
 limiter.limit('10 per minute', methods=['GET','POST','PUT','PATCH','DELETE'])(auth_bp)
 

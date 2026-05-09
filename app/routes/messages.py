@@ -22,13 +22,23 @@ def get_contacts():
     org_f  = "AND u.organisation_id = %s" if org_id is not None else ""
     params = ([org_id, user_id] if org_id is not None else [user_id])
     cursor.execute(f'''
-        SELECT u.id, u.name, u.email, u.role, d.name as department_name, t.name as team_name
+        SELECT u.id, u.name, u.email, u.role, u.profile_image, d.name as department_name, t.name as team_name
         FROM users u
         LEFT JOIN departments d ON u.department_id = d.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE u.id != %s {org_f}
     ''', [user_id] + ([org_id] if org_id is not None else []))
     contacts = cursor.fetchall() or []
+    
+    from app.routes.auth import PROFILE_UPLOAD_FOLDER
+    import os
+    for contact in contacts:
+        if contact.get('profile_image'):
+            try:
+                path = os.path.join(PROFILE_UPLOAD_FOLDER, contact['profile_image'])
+                if os.path.exists(path):
+                    contact['profile_image'] = f"{contact['profile_image']}?t={int(os.path.getmtime(path))}"
+            except: pass
     
     # Add individual chat details
     for contact in contacts:
@@ -94,12 +104,24 @@ def get_messages(other_user_id):
     
     if is_group:
         cursor.execute('''
-            SELECT m.id, m.sender_id, m.group_id, m.content, m.timestamp, m.is_read, m.file_url, m.file_name, m.file_type, m.is_edited, u.name as sender_name
+            SELECT m.id, m.sender_id, m.group_id, m.content, m.timestamp, m.is_read, m.file_url, m.file_name, m.file_type, m.is_edited, u.name as sender_name, u.profile_image as sender_image
             FROM messages m
             JOIN users u ON m.sender_id = u.id
             WHERE m.group_id = %s
             ORDER BY m.timestamp ASC
         ''', (other_user_id,))
+        messages = cursor.fetchall() or []
+        from app.routes.auth import PROFILE_UPLOAD_FOLDER
+        import os
+        for m in messages:
+            if m.get('sender_image'):
+                try:
+                    path = os.path.join(PROFILE_UPLOAD_FOLDER, m['sender_image'])
+                    if os.path.exists(path):
+                        m['sender_image'] = f"{m['sender_image']}?t={int(os.path.getmtime(path))}"
+                except: pass
+        cursor.close(); conn.close()
+        return jsonify(messages), 200
     else:
         # Mark individual messages as read
         cursor.execute('''

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, make_response
 from flask_jwt_extended import (
     jwt_required, get_jwt_identity, get_jwt,
     jwt_required as refresh_required,
@@ -16,6 +16,7 @@ auth_bp = Blueprint('auth', __name__)
 PROFILE_UPLOAD_FOLDER = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'uploads', 'profiles')
 )
+print(f"DEBUG: PROFILE_UPLOAD_FOLDER is {os.path.abspath(PROFILE_UPLOAD_FOLDER)}")
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 os.makedirs(PROFILE_UPLOAD_FOLDER, exist_ok=True)
 
@@ -81,6 +82,13 @@ def get_current_user():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     user.pop('password', None)
+    if user.get('profile_image'):
+        try:
+            path = os.path.join(PROFILE_UPLOAD_FOLDER, user['profile_image'])
+            if os.path.exists(path):
+                user['profile_image'] = f"{user['profile_image']}?t={int(os.path.getmtime(path))}"
+        except:
+            pass
     return jsonify(user), 200
 
 
@@ -220,23 +228,60 @@ def update_profile():
 @auth_bp.route('/profile/image', methods=['POST'])
 @jwt_required()
 def upload_profile_image():
-    user_id = int(get_jwt_identity())
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-    file = request.files['image']
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        return jsonify({'error': 'Invalid image type'}), 400
-    filename = f"profile_{user_id}.{ext}"
-    file.save(os.path.join(PROFILE_UPLOAD_FOLDER, filename))
-    User.update(user_id, profile_image=filename)
-    return jsonify({'profile_image': filename}), 200
+    try:
+        identity = get_jwt_identity()
+        print(f"DEBUG: upload_profile_image hit by user {identity}")
+        user_id = int(identity)
+        
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image provided in request'}), 400
+            
+        file = request.files['image']
+        if not file or file.filename == '':
+            return jsonify({'error': 'No image selected'}), 400
+            
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            return jsonify({'error': f'Invalid image type: {ext}. Allowed: {", ".join(ALLOWED_IMAGE_EXTENSIONS)}'}), 400
+            
+        filename = secure_filename(f"profile_{user_id}.{ext}")
+        filepath = os.path.join(PROFILE_UPLOAD_FOLDER, filename)
+        
+        # 1. Save new file
+        file.save(filepath)
+        print(f"DEBUG: Saved file to {filepath}")
+        
+        # 2. Update database
+        User.update(user_id, profile_image=filename)
+        print(f"DEBUG: Updated database for user {user_id}")
+        
+        # 3. Cleanup other extensions (best effort)
+        try:
+            for f in os.listdir(PROFILE_UPLOAD_FOLDER):
+                if f.startswith(f"profile_{user_id}.") and f != filename:
+                    os.remove(os.path.join(PROFILE_UPLOAD_FOLDER, f))
+        except Exception as cleanup_err:
+            print(f"DEBUG: Cleanup warning: {cleanup_err}")
+
+        mtime = int(os.path.getmtime(filepath))
+        return jsonify({
+            'message': 'Profile image updated',
+            'profile_image': f"{filename}?t={mtime}"
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"ERROR in upload_profile_image: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': 'Internal server error during upload', 'detail': str(e)}), 500
 
 
 # ── Serve Profile Image ────────────────────────────────────────
 @auth_bp.route('/profile/image/<filename>', methods=['GET'])
 def serve_profile_image(filename):
-    return send_from_directory(PROFILE_UPLOAD_FOLDER, filename)
+    response = make_response(send_from_directory(PROFILE_UPLOAD_FOLDER, filename))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 
 # ── Update User (Admin/HR) ───────────────────────────────────

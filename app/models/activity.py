@@ -97,7 +97,7 @@ class ActivityLog:
         params = ([organisation_id] if organisation_id is not None else [])
         cursor.execute(f"""
             SELECT
-                u.id, u.name, u.role,
+                u.id, u.name, u.role, u.profile_image,
                 t.name  AS team_name,
                 dp.name AS department_name,
                 COALESCE(es.status, 'offline') AS status,
@@ -117,6 +117,17 @@ class ActivityLog:
             ORDER BY FIELD(COALESCE(es.status,'offline'), 'active','online','idle','away','offline'), u.name
         """, params)
         rows = [_s(r) for r in cursor.fetchall()]
+        
+        from app.routes.auth import PROFILE_UPLOAD_FOLDER
+        import os
+        for r in rows:
+            if r.get('profile_image'):
+                try:
+                    path = os.path.join(PROFILE_UPLOAD_FOLDER, r['profile_image'])
+                    if os.path.exists(path):
+                        r['profile_image'] = f"{r['profile_image']}?t={int(os.path.getmtime(path))}"
+                except: pass
+
         cursor.close()
         conn.close()
         cutoff = now_ist() - timedelta(minutes=2)

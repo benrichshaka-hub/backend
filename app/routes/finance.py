@@ -92,3 +92,20 @@ def update_total_amount(client_id):
         return jsonify({"error": "total_amount required"}), 400
     Client.update(client_id, total_amount=data['total_amount'])
     return jsonify({"message": "Total amount updated"}), 200
+@finance_bp.route('/finance/payments', methods=['GET'])
+@jwt_required()
+def get_all_payments():
+    claims = get_jwt()
+    if claims['role'] not in ALLOWED_ROLES:
+        return jsonify({"error": "Unauthorized"}), 403
+    org_id = claims.get('organisation_id')
+    client_id = request.args.get('client_id')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    payments = ClientPayment.get_all_payments(
+        client_id=client_id,
+        start_date=start_date,
+        end_date=end_date,
+        organisation_id=org_id
+    )
+    return jsonify(payments), 200
