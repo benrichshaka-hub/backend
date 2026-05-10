@@ -151,7 +151,7 @@ def get_notifications():
     return jsonify(notifications), 200
 
 
-@other_bp.route('/notifications/<int:notification_id>/read', methods=['PUT'])
+@other_bp.route('/notifications/<int:notification_id>/read', methods=['PUT', 'PATCH'])
 @jwt_required()
 def mark_notification_read(notification_id):
     Notification.mark_read(notification_id)

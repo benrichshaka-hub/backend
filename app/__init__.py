@@ -146,6 +146,12 @@ from app.routes.documents import documents_bp
 from app.routes.domain import domain_bp
 from app.routes.superadmin import superadmin_bp
 from app.routes.eod import eod_bp
+from app.routes.salary import salary_bp
+from app.routes.leads import leads_bp
+from app.routes.calendar import calendar_bp
+from app.routes.client_profile import client_profile_bp
+from app.routes.lead_activity import lead_activity_bp
+from app.routes.finance import finance_bp
 
 app.register_blueprint(auth_bp,          url_prefix='/api/auth')
 app.register_blueprint(client_bp,        url_prefix='/api')
@@ -161,11 +167,17 @@ app.register_blueprint(feedback_bp,      url_prefix='/api')
 app.register_blueprint(analytics_bp,     url_prefix='/api')
 app.register_blueprint(proposals_bp,     url_prefix='/api')
 app.register_blueprint(messages_bp,      url_prefix='/api/messages')
-app.register_blueprint(announcements_bp, url_prefix='/api/announcements')
+app.register_blueprint(announcements_bp, url_prefix='/api')
 app.register_blueprint(documents_bp,     url_prefix='/api/documents')
 app.register_blueprint(domain_bp,        url_prefix='/api')
 app.register_blueprint(superadmin_bp,    url_prefix='/api/superadmin')
 app.register_blueprint(eod_bp,           url_prefix='/api')
+app.register_blueprint(salary_bp,        url_prefix='/api')
+app.register_blueprint(leads_bp,         url_prefix='/api')
+app.register_blueprint(calendar_bp,      url_prefix='/api')
+app.register_blueprint(client_profile_bp, url_prefix='/api')
+app.register_blueprint(lead_activity_bp, url_prefix='/api')
+app.register_blueprint(finance_bp,       url_prefix='/api')
 
 limiter.limit('10 per minute', methods=['GET','POST','PUT','PATCH','DELETE'])(auth_bp)
 

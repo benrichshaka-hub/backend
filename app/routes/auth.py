@@ -9,6 +9,7 @@ from app.utils.validators import (
     is_valid_email, is_strong_password, sanitize_str, require_json
 )
 from werkzeug.utils import secure_filename
+from app.utils.database import get_db_connection
 import os
 
 auth_bp = Blueprint('auth', __name__)
@@ -78,17 +79,36 @@ def refresh():
 @jwt_required()
 def get_current_user():
     user_id = int(get_jwt_identity())
-    user = User.get_by_id(user_id)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.team_id, u.department_id, u.manager_id,
+               u.profile_image, u.profile_image_data, u.bio, u.dob, u.address,
+               u.emergency_contact_name, u.emergency_contact_phone,
+               t.name as team_name, d.name as department_name,
+               m.name as manager_name, u.created_at, u.organisation_id
+        FROM users u
+        LEFT JOIN teams t ON u.team_id = t.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE u.id = %s
+    """, (user_id,))
+    user = cursor.fetchone()
+    cursor.close(); conn.close()
     if not user:
         return jsonify({'error': 'User not found'}), 404
     user.pop('password', None)
-    if user.get('profile_image'):
+    # Return base64 data URL directly — no separate image HTTP request needed
+    if user.get('profile_image_data'):
+        user['profile_image'] = user['profile_image_data']
+    elif user.get('profile_image'):
         try:
             path = os.path.join(PROFILE_UPLOAD_FOLDER, user['profile_image'])
             if os.path.exists(path):
                 user['profile_image'] = f"{user['profile_image']}?t={int(os.path.getmtime(path))}"
-        except:
+        except Exception:
             pass
+    user.pop('profile_image_data', None)
     return jsonify(user), 200
 
 
@@ -229,59 +249,78 @@ def update_profile():
 @jwt_required()
 def upload_profile_image():
     try:
-        identity = get_jwt_identity()
-        print(f"DEBUG: upload_profile_image hit by user {identity}")
-        user_id = int(identity)
-        
+        user_id = int(get_jwt_identity())
+
         if 'image' not in request.files:
             return jsonify({'error': 'No image provided in request'}), 400
-            
         file = request.files['image']
         if not file or file.filename == '':
             return jsonify({'error': 'No image selected'}), 400
-            
+
         ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
         if ext not in ALLOWED_IMAGE_EXTENSIONS:
-            return jsonify({'error': f'Invalid image type: {ext}. Allowed: {", ".join(ALLOWED_IMAGE_EXTENSIONS)}'}), 400
-            
-        filename = secure_filename(f"profile_{user_id}.{ext}")
-        filepath = os.path.join(PROFILE_UPLOAD_FOLDER, filename)
-        
-        # 1. Save new file
-        file.save(filepath)
-        print(f"DEBUG: Saved file to {filepath}")
-        
-        # 2. Update database
-        User.update(user_id, profile_image=filename)
-        print(f"DEBUG: Updated database for user {user_id}")
-        
-        # 3. Cleanup other extensions (best effort)
-        try:
-            for f in os.listdir(PROFILE_UPLOAD_FOLDER):
-                if f.startswith(f"profile_{user_id}.") and f != filename:
-                    os.remove(os.path.join(PROFILE_UPLOAD_FOLDER, f))
-        except Exception as cleanup_err:
-            print(f"DEBUG: Cleanup warning: {cleanup_err}")
+            return jsonify({'error': f'Invalid image type. Allowed: {", ".join(ALLOWED_IMAGE_EXTENSIONS)}'}), 400
 
-        mtime = int(os.path.getmtime(filepath))
-        return jsonify({
-            'message': 'Profile image updated',
-            'profile_image': f"{filename}?t={mtime}"
-        }), 200
-        
+        import base64
+        file_bytes = file.read()
+        if len(file_bytes) > 5 * 1024 * 1024:  # 5MB limit
+            return jsonify({'error': 'Image too large. Max 5MB.'}), 400
+
+        mime = f'image/{ext}' if ext != 'jpg' else 'image/jpeg'
+        b64  = base64.b64encode(file_bytes).decode('utf-8')
+        data_url = f'data:{mime};base64,{b64}'
+
+        filename = secure_filename(f'profile_{user_id}.{ext}')
+        User.update(user_id, profile_image=filename, profile_image_data=data_url)
+
+        # Also save to disk as fallback (best effort)
+        try:
+            filepath = os.path.join(PROFILE_UPLOAD_FOLDER, filename)
+            with open(filepath, 'wb') as f:
+                f.write(file_bytes)
+        except Exception:
+            pass
+
+        return jsonify({'message': 'Profile image updated', 'profile_image': filename}), 200
+
     except Exception as e:
         import traceback
-        print(f"ERROR in upload_profile_image: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({'error': 'Internal server error during upload', 'detail': str(e)}), 500
+        return jsonify({'error': 'Upload failed', 'detail': str(e)}), 500
 
 
-# ── Serve Profile Image ────────────────────────────────────────
+# ── Serve Profile Image (fallback for direct URL access) ───────
 @auth_bp.route('/profile/image/<filename>', methods=['GET'])
 def serve_profile_image(filename):
-    response = make_response(send_from_directory(PROFILE_UPLOAD_FOLDER, filename))
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
+    # Try filesystem first
+    filepath = os.path.join(PROFILE_UPLOAD_FOLDER, filename)
+    if os.path.exists(filepath):
+        response = make_response(send_from_directory(PROFILE_UPLOAD_FOLDER, filename))
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response
+    # Fallback: serve from DB
+    from app.utils.database import get_db_connection
+    import base64, re
+    try:
+        conn   = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute('SELECT profile_image_data FROM users WHERE profile_image = %s LIMIT 1',
+                       (filename.split('?')[0],))
+        row = cursor.fetchone()
+        cursor.close(); conn.close()
+        if row and row.get('profile_image_data'):
+            data_url = row['profile_image_data']
+            match = re.match(r'data:(image/[^;]+);base64,(.+)', data_url)
+            if match:
+                mime, b64 = match.group(1), match.group(2)
+                img_bytes = base64.b64decode(b64)
+                response  = make_response(img_bytes)
+                response.headers['Content-Type']               = mime
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                return response
+    except Exception:
+        pass
+    return jsonify({'error': 'Image not found'}), 404
 
 
 # ── Update User (Admin/HR) ───────────────────────────────────

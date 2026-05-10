@@ -6,7 +6,7 @@ from datetime import datetime, date
 from decimal import Decimal
 import os
 
-documents_bp = Blueprint('documents', __name__, url_prefix='/api/documents')
+documents_bp = Blueprint('documents', __name__)
 documents_bp.strict_slashes = False
 
 UPLOAD_FOLDER = os.path.normpath(
@@ -32,7 +32,6 @@ def serialize(row):
     return out
 
 
-@documents_bp.route('', methods=['GET'])
 @documents_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_documents():
@@ -55,7 +54,6 @@ def get_documents():
     return jsonify([serialize(r) for r in rows]), 200
 
 
-@documents_bp.route('', methods=['POST'])
 @documents_bp.route('/', methods=['POST'])
 @jwt_required()
 def upload_document():

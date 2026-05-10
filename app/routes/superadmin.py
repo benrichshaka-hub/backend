@@ -143,6 +143,7 @@ def superadmin_login():
     data     = request.get_json()
     email    = sanitize_str(data.get('email', '')).lower()
     password = data.get('password', '')
+    print(f"DEBUG LOGIN - Email: '{email}', Password length: {len(password)}, Raw password: '{password}'")
 
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400

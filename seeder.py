@@ -46,6 +46,9 @@ DEPARTMENTS = [
 
 # (name, email, password, role, team_name, dept_name)
 EMPLOYEES = [
+    # Main Admin
+    ("Admin",             "admin@kaira.com",       "admin123",       "admin",          None,          None),
+
     # Marketing team head
     ("Prabhakaran B",     "prabhakaran@gmail.com", "prabhakaran123", "marketing_head", "Marketing",   None),
 
